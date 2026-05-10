@@ -5,7 +5,7 @@ pipeline {
         PROJECT_ID   = "sync-project"
         REGION       = "us-central1"
         SERVICE_NAME = "sync-service"
-        REPOSITORY   = "backend"
+        REPOSITORY   = "admin-backend"
 
         IMAGE_TAG = "${BUILD_NUMBER}"
 
