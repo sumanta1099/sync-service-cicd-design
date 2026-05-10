@@ -213,14 +213,11 @@
             <mxPoint x="250" y="230" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="KnGWHsp8X9h-MlTOL-rD-124" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="" vertex="1">
-          <mxGeometry height="60" width="120" x="210" y="480" as="geometry" />
-        </mxCell>
-        <mxCell id="KnGWHsp8X9h-MlTOL-rD-125" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;" value="" vertex="1">
-          <mxGeometry height="1110" width="2050" x="-590" y="-130" as="geometry" />
-        </mxCell>
         <mxCell id="KnGWHsp8X9h-MlTOL-rD-126" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;&lt;b&gt;&lt;font&gt;Backend Service Architecture&amp;nbsp;&lt;/font&gt;&lt;/b&gt;&lt;/font&gt;" vertex="1">
           <mxGeometry height="15" width="210" x="-550" y="-95" as="geometry" />
+        </mxCell>
+        <mxCell id="KnGWHsp8X9h-MlTOL-rD-127" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;fillStyle=auto;gradientColor=none;" value="" vertex="1">
+          <mxGeometry height="1110" width="2050" x="-550" y="-130" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
