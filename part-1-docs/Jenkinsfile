@@ -2,9 +2,14 @@ pipeline {
     agent any
 
     environment {
-        APP_NAME = "sync-service"
-        REGISTRY = "gcr.io/sync"
+        PROJECT_ID   = "sync-project"
+        REGION       = "us-central1"
+        SERVICE_NAME = "sync-service"
+        REPOSITORY   = "backend"
+
         IMAGE_TAG = "${BUILD_NUMBER}"
+
+        IMAGE = "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${SERVICE_NAME}:${IMAGE_TAG}"
     }
 
     stages {
@@ -22,22 +27,16 @@ pipeline {
             }
         }
 
-        stage('Unit Test') {
+        stage('Test') {
             steps {
                 sh './mvnw test'
-            }
-        }
-
-        stage('Code Quality') {
-            steps {
-                echo "Running SonarQube Scan"
             }
         }
 
         stage('Build Docker Image') {
             steps {
                 sh """
-                docker build -t $REGISTRY/$APP_NAME:$IMAGE_TAG .
+                docker build -t ${IMAGE} .
                 """
             }
         }
@@ -53,49 +52,8 @@ pipeline {
 
             steps {
                 sh """
-                docker push $REGISTRY/$APP_NAME:$IMAGE_TAG
-                """
-            }
-        }
-
-        stage('Deploy to QA') {
-            when {
-                branch 'development'
-            }
-
-            steps {
-                sh """
-                ssh qa-server '
-                docker pull $REGISTRY/$APP_NAME:$IMAGE_TAG &&
-                docker stop sync-service || true &&
-                docker rm sync-service || true &&
-                docker run -d \
-                  --name sync-service \
-                  -p 8080:8080 \
-                  -e SPRING_PROFILES_ACTIVE=qa \
-                  $REGISTRY/$APP_NAME:$IMAGE_TAG
-                '
-                """
-            }
-        }
-
-        stage('Deploy to Staging') {
-            when {
-                branch 'staging'
-            }
-
-            steps {
-                sh """
-                ssh staging-server '
-                docker pull $REGISTRY/$APP_NAME:$IMAGE_TAG &&
-                docker stop sync-service || true &&
-                docker rm sync-service || true &&
-                docker run -d \
-                  --name sync-service \
-                  -p 8080:8080 \
-                  -e SPRING_PROFILES_ACTIVE=staging \
-                  $REGISTRY/$APP_NAME:$IMAGE_TAG
-                '
+                gcloud auth configure-docker ${REGION}-docker.pkg.dev -q
+                docker push ${IMAGE}
                 """
             }
         }
@@ -110,50 +68,84 @@ pipeline {
             }
         }
 
-        stage('Deploy to Production') {
+        stage('Deploy to Cloud Run') {
             when {
-                branch 'prod'
+                anyOf {
+                    branch 'development'
+                    branch 'staging'
+                    branch 'prod'
+                }
             }
 
             steps {
-                sh """
-                ssh prod-server '
-                docker pull $REGISTRY/$APP_NAME:$IMAGE_TAG &&
-                docker stop sync-service || true &&
-                docker rm sync-service || true &&
-                docker run -d \
-                  --name sync-service \
-                  -p 8080:8080 \
-                  -e SPRING_PROFILES_ACTIVE=prod \
-                  $REGISTRY/$APP_NAME:$IMAGE_TAG
-                '
-                """
+
+                script {
+
+                    def profile = "qa"
+
+                    if (env.BRANCH_NAME == "staging") {
+                        profile = "staging"
+                    }
+
+                    if (env.BRANCH_NAME == "prod") {
+                        profile = "prod"
+                    }
+
+                    sh """
+                    gcloud run deploy ${SERVICE_NAME} \
+                      --image ${IMAGE} \
+                      --region ${REGION} \
+                      --platform managed \
+                      --allow-unauthenticated \
+                      --set-env-vars SPRING_PROFILES_ACTIVE=${profile}
+                    """
+                }
             }
         }
 
         stage('Health Check') {
+            when {
+                anyOf {
+                    branch 'development'
+                    branch 'staging'
+                    branch 'prod'
+                }
+            }
+
             steps {
                 sh """
-                curl -f http://server-ip:8080/actuator/health
+                SERVICE_URL=\$(gcloud run services describe ${SERVICE_NAME} \
+                  --region ${REGION} \
+                  --format='value(status.url)')
+
+                curl -f \$SERVICE_URL/actuator/health
                 """
             }
         }
     }
 
     post {
+
         failure {
-            echo "Deployment failed. Starting rollback..."
+
+            echo "Deployment failed. Rolling back..."
 
             sh """
-            ssh prod-server '
-            docker pull $REGISTRY/$APP_NAME:previous-stable &&
-            docker stop sync-service || true &&
-            docker rm sync-service || true &&
-            docker run -d \
-              --name sync-service \
-              -p 8080:8080 \
-              $REGISTRY/$APP_NAME:previous-stable
-            '
+            PREVIOUS_REVISION=\$(gcloud run revisions list \
+              --service=${SERVICE_NAME} \
+              --region=${REGION} \
+              --sort-by="~metadata.creationTimestamp" \
+              --format="value(metadata.name)" | sed -n '2p')
+
+            if [ ! -z "\$PREVIOUS_REVISION" ]; then
+
+              gcloud run services update-traffic ${SERVICE_NAME} \
+                --region=${REGION} \
+                --to-revisions=\$PREVIOUS_REVISION=100
+
+            else
+              echo "No previous revision found."
+            fi
             """
         }
     }
